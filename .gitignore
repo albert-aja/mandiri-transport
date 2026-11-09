@@ -1,0 +1,23 @@
+# Build & IDE
+.idea/
+.vscode/
+*.iml
+target/
+build/
+.dart_tool/
+.packages
+.flutter-plugins
+.flutter-plugins-dependencies
+
+# Environment & Secrets
+.env
+*.env.local
+google-services.json
+GoogleService-Info.plist
+firebase-service-account.json
+
+# OS & Logs
+.DS_Store
+Thumbs.db
+*.log
+
