@@ -8,6 +8,7 @@ import com.mandiritransport.ops.trip.dto.TripDtos.GpsBatchResponse;
 import com.mandiritransport.ops.trip.dto.TripDtos.GpsHistoryResponse;
 import com.mandiritransport.ops.trip.dto.TripDtos.InspectionRequest;
 import com.mandiritransport.ops.trip.dto.TripDtos.LostAndFoundRequest;
+import com.mandiritransport.ops.trip.dto.TripDtos.TodayFlightScheduleDto;
 import com.mandiritransport.ops.trip.dto.TripDtos.TripDetailDto;
 import com.mandiritransport.ops.trip.dto.TripDtos.UpdateLostAndFoundStatusRequest;
 import com.mandiritransport.ops.trip.dto.TripDtos.UpdateTripScheduleRequest;
@@ -49,6 +50,12 @@ public class TripController {
             @RequestParam(value = "dateFrom", required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dateFrom,
             @RequestParam(value = "dateTo", required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dateTo) {
         return ApiResponse.ok(tripService.listTrips(status, driverId, vehicleId, dateFrom, dateTo));
+    }
+
+    @GetMapping("/trips/today-flights")
+    public ApiResponse<List<TodayFlightScheduleDto>> listTodayFlightSchedules(
+            @RequestParam(value = "date", required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
+        return ApiResponse.ok(tripService.listTodayFlightSchedules(date));
     }
 
     @GetMapping("/trips/{id}")

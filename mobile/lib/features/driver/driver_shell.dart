@@ -9,6 +9,7 @@ import '../../data/models/models.dart';
 import '../../data/state/app_controller.dart';
 import 'airport_signboard_screen.dart';
 import 'driver_field_sheets.dart';
+import '../flight/today_flights_highlight_section.dart';
 
 class DriverShell extends ConsumerStatefulWidget {
   const DriverShell({super.key});
@@ -223,15 +224,22 @@ class _DriverShellState extends ConsumerState<DriverShell> {
     final controller = ref.read(appControllerProvider.notifier);
 
     if (activeTrips.isEmpty) {
-      return const Center(
-        child: Padding(
-          padding: EdgeInsets.all(24),
-          child: Text(
-            'Belum ada tugas perjalanan aktif. Silakan cek tab Setoran & Riwayat.',
-            textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 15, color: AppColors.textSecondary),
+      return ListView(
+        padding: const EdgeInsets.all(16),
+        children: const [
+          TodayFlightsHighlightSection(isOwnerView: false),
+          SizedBox(height: 16),
+          Center(
+            child: Padding(
+              padding: EdgeInsets.all(24),
+              child: Text(
+                'Belum ada tugas perjalanan aktif. Silakan cek tab Setoran & Riwayat.',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 15, color: AppColors.textSecondary),
+              ),
+            ),
           ),
-        ),
+        ],
       );
     }
 
@@ -244,6 +252,7 @@ class _DriverShellState extends ConsumerState<DriverShell> {
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
       children: [
+        const TodayFlightsHighlightSection(isOwnerView: false),
         // HERO ACTIVE TRIP CARD
         Card(
           child: Padding(

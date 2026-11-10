@@ -1227,6 +1227,145 @@ class GpsPointRecord {
   };
 }
 
+class FlightScheduleInfo {
+  final String flightNumber;
+  final String? airlineName;
+  final String? originAirport;
+  final String? destinationAirport;
+  final String? scheduledDepartureTime;
+  final String? scheduledArrivalTime;
+  final String? estimatedArrivalTime;
+  final String? actualArrivalTime;
+  final String flightStatus; // SCHEDULED | BOARDING | IN_AIR | LANDED | DELAYED | CANCELLED | DIVERTED | UNKNOWN
+  final int delayMinutes;
+  final String? gate;
+  final String? terminal;
+  final String? baggageClaim;
+  final String trackingStatus; // LIVE | RECENT | STALE | UNAVAILABLE
+  final String? lastTrackedAt;
+  final String? trackingNotes;
+
+  const FlightScheduleInfo({
+    required this.flightNumber,
+    this.airlineName,
+    this.originAirport,
+    this.destinationAirport,
+    this.scheduledDepartureTime,
+    this.scheduledArrivalTime,
+    this.estimatedArrivalTime,
+    this.actualArrivalTime,
+    this.flightStatus = 'SCHEDULED',
+    this.delayMinutes = 0,
+    this.gate,
+    this.terminal,
+    this.baggageClaim,
+    this.trackingStatus = 'UNAVAILABLE',
+    this.lastTrackedAt,
+    this.trackingNotes,
+  });
+
+  bool get isLanded => flightStatus == 'LANDED';
+  bool get isDelayed => flightStatus == 'DELAYED' || delayMinutes > 0;
+  bool get isCancelled => flightStatus == 'CANCELLED';
+  bool get isDiverted => flightStatus == 'DIVERTED';
+  bool get isInAir => flightStatus == 'IN_AIR';
+  bool get isBoarding => flightStatus == 'BOARDING';
+
+  bool get isLive => trackingStatus == 'LIVE';
+  bool get isStale => trackingStatus == 'STALE';
+  bool get isTrackingAvailable => trackingStatus != 'UNAVAILABLE';
+
+  String? get airlineNameResolved => airlineName;
+
+  String get effectiveArrivalTime {
+    if (actualArrivalTime != null && actualArrivalTime!.isNotEmpty) {
+      return actualArrivalTime!;
+    }
+    if (estimatedArrivalTime != null && estimatedArrivalTime!.isNotEmpty) {
+      return estimatedArrivalTime!;
+    }
+    return scheduledArrivalTime ?? '';
+  }
+
+  FlightScheduleInfo copyWith({
+    String? flightNumber,
+    String? airlineName,
+    String? originAirport,
+    String? destinationAirport,
+    String? scheduledDepartureTime,
+    String? scheduledArrivalTime,
+    String? estimatedArrivalTime,
+    String? actualArrivalTime,
+    String? flightStatus,
+    int? delayMinutes,
+    String? gate,
+    String? terminal,
+    String? baggageClaim,
+    String? trackingStatus,
+    String? lastTrackedAt,
+    String? trackingNotes,
+  }) {
+    return FlightScheduleInfo(
+      flightNumber: flightNumber ?? this.flightNumber,
+      airlineName: airlineName ?? this.airlineName,
+      originAirport: originAirport ?? this.originAirport,
+      destinationAirport: destinationAirport ?? this.destinationAirport,
+      scheduledDepartureTime:
+          scheduledDepartureTime ?? this.scheduledDepartureTime,
+      scheduledArrivalTime: scheduledArrivalTime ?? this.scheduledArrivalTime,
+      estimatedArrivalTime: estimatedArrivalTime ?? this.estimatedArrivalTime,
+      actualArrivalTime: actualArrivalTime ?? this.actualArrivalTime,
+      flightStatus: flightStatus ?? this.flightStatus,
+      delayMinutes: delayMinutes ?? this.delayMinutes,
+      gate: gate ?? this.gate,
+      terminal: terminal ?? this.terminal,
+      baggageClaim: baggageClaim ?? this.baggageClaim,
+      trackingStatus: trackingStatus ?? this.trackingStatus,
+      lastTrackedAt: lastTrackedAt ?? this.lastTrackedAt,
+      trackingNotes: trackingNotes ?? this.trackingNotes,
+    );
+  }
+
+  factory FlightScheduleInfo.fromJson(Map<String, dynamic> json) =>
+      FlightScheduleInfo(
+        flightNumber: (json['flightNumber'] as String?) ?? '',
+        airlineName: json['airlineName'] as String?,
+        originAirport: json['originAirport'] as String?,
+        destinationAirport: json['destinationAirport'] as String?,
+        scheduledDepartureTime: json['scheduledDepartureTime'] as String?,
+        scheduledArrivalTime: json['scheduledArrivalTime'] as String?,
+        estimatedArrivalTime: json['estimatedArrivalTime'] as String?,
+        actualArrivalTime: json['actualArrivalTime'] as String?,
+        flightStatus: (json['flightStatus'] as String?) ?? 'SCHEDULED',
+        delayMinutes: asInt(json['delayMinutes'], 0),
+        gate: json['gate'] as String?,
+        terminal: json['terminal'] as String?,
+        baggageClaim: json['baggageClaim'] as String?,
+        trackingStatus: (json['trackingStatus'] as String?) ?? 'UNAVAILABLE',
+        lastTrackedAt: json['lastTrackedAt'] as String?,
+        trackingNotes: json['trackingNotes'] as String?,
+      );
+
+  Map<String, dynamic> toJson() => {
+    'flightNumber': flightNumber,
+    'airlineName': airlineName,
+    'originAirport': originAirport,
+    'destinationAirport': destinationAirport,
+    'scheduledDepartureTime': scheduledDepartureTime,
+    'scheduledArrivalTime': scheduledArrivalTime,
+    'estimatedArrivalTime': estimatedArrivalTime,
+    'actualArrivalTime': actualArrivalTime,
+    'flightStatus': flightStatus,
+    'delayMinutes': delayMinutes,
+    'gate': gate,
+    'terminal': terminal,
+    'baggageClaim': baggageClaim,
+    'trackingStatus': trackingStatus,
+    'lastTrackedAt': lastTrackedAt,
+    'trackingNotes': trackingNotes,
+  };
+}
+
 class Trip {
   final String id;
   final String tripCode;
@@ -1285,6 +1424,7 @@ class Trip {
   final List<TripExpense> expenses;
   final List<VehicleInspection> inspections;
   final List<LostAndFoundItem> lostAndFoundItems;
+  final FlightScheduleInfo? flightInfo;
 
   const Trip({
     required this.id,
@@ -1344,6 +1484,7 @@ class Trip {
     this.expenses = const [],
     this.inspections = const [],
     this.lostAndFoundItems = const [],
+    this.flightInfo,
   });
 
   bool get isActiveExecutionState => const {
@@ -1393,6 +1534,7 @@ class Trip {
     List<TripExpense>? expenses,
     List<VehicleInspection>? inspections,
     List<LostAndFoundItem>? lostAndFoundItems,
+    FlightScheduleInfo? flightInfo,
   }) {
     return Trip(
       id: id,
@@ -1452,6 +1594,7 @@ class Trip {
       expenses: expenses ?? this.expenses,
       inspections: inspections ?? this.inspections,
       lostAndFoundItems: lostAndFoundItems ?? this.lostAndFoundItems,
+      flightInfo: flightInfo ?? this.flightInfo,
     );
   }
 
@@ -1538,6 +1681,9 @@ class Trip {
         .whereType<Map<String, dynamic>>()
         .map(LostAndFoundItem.fromJson)
         .toList(),
+    flightInfo: json['flightInfo'] is Map<String, dynamic>
+        ? FlightScheduleInfo.fromJson(json['flightInfo'] as Map<String, dynamic>)
+        : null,
   );
 
   Map<String, dynamic> toJson() => {
@@ -1598,5 +1744,6 @@ class Trip {
     'expenses': expenses.map((e) => e.toJson()).toList(),
     'inspections': inspections.map((e) => e.toJson()).toList(),
     'lostAndFoundItems': lostAndFoundItems.map((e) => e.toJson()).toList(),
+    'flightInfo': flightInfo?.toJson(),
   };
 }

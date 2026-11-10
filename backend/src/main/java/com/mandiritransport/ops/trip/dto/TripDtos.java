@@ -179,4 +179,48 @@ public final class TripDtos {
             List<LostAndFoundItem> lostAndFoundItems
     ) {
     }
+
+    public record FlightScheduleInfoDto(
+            String flightNumber,
+            String airlineName,
+            String originAirport,
+            String destinationAirport,
+            OffsetDateTime scheduledDepartureTime,
+            OffsetDateTime scheduledArrivalTime,
+            OffsetDateTime estimatedArrivalTime,
+            OffsetDateTime actualArrivalTime,
+            String flightStatus,
+            Integer delayMinutes,
+            String gate,
+            String terminal,
+            String baggageClaim,
+            String trackingStatus,
+            OffsetDateTime lastTrackedAt,
+            String trackingNotes
+    ) {
+    }
+
+    public record TodayFlightScheduleDto(
+            String tripId,
+            String tripCode,
+            String bookingId,
+            String bookingCode,
+            String customerId,
+            String customerName,
+            String customerPhone,
+            String driverId,
+            String driverName,
+            String vehicleId,
+            String vehiclePlate,
+            String vehicleModel,
+            String routeId,
+            String routeName,
+            String tripType,
+            String pickupAddress,
+            String destinationAddress,
+            OffsetDateTime scheduledPickupAt,
+            String tripStatus,
+            FlightScheduleInfoDto flightInfo
+    ) {
+    }
 }

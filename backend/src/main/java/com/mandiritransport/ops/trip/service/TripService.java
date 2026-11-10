@@ -31,7 +31,17 @@ import com.mandiritransport.ops.trip.dto.TripDtos.GpsHistoryResponse;
 import com.mandiritransport.ops.trip.dto.TripDtos.GpsPointInput;
 import com.mandiritransport.ops.trip.dto.TripDtos.InspectionRequest;
 import com.mandiritransport.ops.trip.dto.TripDtos.LostAndFoundRequest;
+import com.mandiritransport.ops.trip.dto.TripDtos.TodayFlightScheduleDto;
+import com.mandiritransport.ops.trip.dto.TripDtos.FlightScheduleInfoDto;
 import com.mandiritransport.ops.trip.dto.TripDtos.TripDetailDto;
+import com.mandiritransport.ops.flighttracking.entity.FlightTrackingCredential;
+import com.mandiritransport.ops.flighttracking.entity.FlightTrackingPollLog;
+import com.mandiritransport.ops.flighttracking.mapper.FlightTrackingCredentialMapper;
+import com.mandiritransport.ops.flighttracking.mapper.FlightTrackingPollLogMapper;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import java.time.ZoneId;
+import java.util.Locale;
+import java.util.Map;
 import com.mandiritransport.ops.trip.dto.TripDtos.UpdateLostAndFoundStatusRequest;
 import com.mandiritransport.ops.trip.dto.TripDtos.UpdateTripScheduleRequest;
 import com.mandiritransport.ops.trip.dto.TripDtos.UpdateTripStatusRequest;
@@ -101,6 +111,9 @@ public class TripService {
     private final CostEngineService costEngineService;
     private final NotificationService notificationService;
     private final AuditService auditService;
+    private final FlightTrackingCredentialMapper flightCredentialMapper;
+    private final FlightTrackingPollLogMapper flightPollLogMapper;
+    private final ObjectMapper objectMapper;
 
     public TripService(TripMapper tripMapper,
                        TripStopMapper stopMapper,
@@ -120,7 +133,10 @@ public class TripService {
                        AppUserMapper appUserMapper,
                        CostEngineService costEngineService,
                        NotificationService notificationService,
-                       AuditService auditService) {
+                       AuditService auditService,
+                       FlightTrackingCredentialMapper flightCredentialMapper,
+                       FlightTrackingPollLogMapper flightPollLogMapper,
+                       ObjectMapper objectMapper) {
         this.tripMapper = tripMapper;
         this.stopMapper = stopMapper;
         this.historyMapper = historyMapper;
@@ -140,6 +156,9 @@ public class TripService {
         this.costEngineService = costEngineService;
         this.notificationService = notificationService;
         this.auditService = auditService;
+        this.flightCredentialMapper = flightCredentialMapper;
+        this.flightPollLogMapper = flightPollLogMapper;
+        this.objectMapper = objectMapper;
     }
 
     public List<TripDetailDto> listTrips(String status,
@@ -807,5 +826,243 @@ public class TripService {
             b.setUpdatedAt(OffsetDateTime.now());
             bookingMapper.updateById(b);
         }
+    }
+
+    public List<TodayFlightScheduleDto> listTodayFlightSchedules(LocalDate dateParam) {
+        SecurityUser current = SecurityUtils.currentUser();
+        LocalDate targetDate = dateParam != null ? dateParam : LocalDate.now(ZoneId.of("Asia/Jakarta"));
+        OffsetDateTime startOfDay = targetDate.atStartOfDay(ZoneId.of("Asia/Jakarta")).toOffsetDateTime();
+        OffsetDateTime endOfDay = targetDate.plusDays(1).atStartOfDay(ZoneId.of("Asia/Jakarta")).toOffsetDateTime();
+
+        LambdaQueryWrapper<Trip> qw = new LambdaQueryWrapper<Trip>()
+                .isNotNull(Trip::getFlightNumber)
+                .ne(Trip::getFlightNumber, "")
+                .ge(Trip::getScheduledPickupAt, startOfDay)
+                .lt(Trip::getScheduledPickupAt, endOfDay)
+                .orderByAsc(Trip::getScheduledPickupAt);
+
+        if (current.isDriver()) {
+            qw.eq(Trip::getDriverId, SecurityUtils.requireDriverId());
+        }
+
+        List<Trip> trips = tripMapper.selectList(qw);
+        return trips.stream()
+                .map(this::toTodayFlightScheduleDto)
+                .toList();
+    }
+
+    public TodayFlightScheduleDto toTodayFlightScheduleDto(Trip t) {
+        Booking b = bookingMapper.selectById(t.getBookingId());
+        Customer c = b != null ? customerMapper.selectById(b.getCustomerId()) : null;
+        Driver d = t.getDriverId() != null ? driverMapper.selectById(t.getDriverId()) : null;
+        Vehicle v = t.getVehicleId() != null ? vehicleMapper.selectById(t.getVehicleId()) : null;
+        Route r = t.getRouteId() != null ? routeMapper.selectById(t.getRouteId()) : null;
+
+        String custPhone = c != null && c.getWhatsappPhone() != null && !c.getWhatsappPhone().isBlank()
+                ? c.getWhatsappPhone() : (b != null ? b.getContactPhone() : (c != null ? c.getPhone() : null));
+
+        FlightScheduleInfoDto flightInfo = resolveFlightScheduleInfo(t);
+
+        return new TodayFlightScheduleDto(
+                t.getId(),
+                t.getTripCode(),
+                t.getBookingId(),
+                b != null ? b.getBookingCode() : null,
+                c != null ? c.getId() : (b != null ? b.getCustomerId() : null),
+                c != null ? c.getName() : (b != null ? b.getContactName() : "Pelanggan"),
+                custPhone,
+                t.getDriverId(),
+                d != null ? d.getFullName() : null,
+                t.getVehicleId(),
+                v != null ? v.getRegistrationNumber() : null,
+                v != null ? v.getNameModel() : null,
+                t.getRouteId(),
+                r != null ? r.getName() : null,
+                t.getTripType(),
+                t.getPickupAddress(),
+                t.getDestinationAddress(),
+                t.getScheduledPickupAt(),
+                t.getStatus(),
+                flightInfo
+        );
+    }
+
+    public FlightScheduleInfoDto resolveFlightScheduleInfo(Trip t) {
+        String flightNo = t.getFlightNumber();
+        String airline = resolveAirlineName(flightNo);
+        boolean isPickup = "AIRPORT_PICKUP".equalsIgnoreCase(t.getTripType());
+        String defaultOrigin = isPickup ? "CGK" : "KNO";
+        String defaultDest = isPickup ? "KNO" : "CGK";
+        int bufferMin = t.getArrivalBufferMin() != null && t.getArrivalBufferMin() > 0 ? t.getArrivalBufferMin() : 30;
+        OffsetDateTime scheduledArrival = isPickup
+                ? t.getScheduledPickupAt().minusMinutes(bufferMin)
+                : t.getScheduledPickupAt().plusMinutes(t.getEstimatedDurationMin() != null ? t.getEstimatedDurationMin() : 75);
+
+        FlightTrackingPollLog latestLog = findLatestPollLogForFlight(t.getId(), flightNo);
+
+        if (latestLog != null && Boolean.TRUE.equals(latestLog.getResponseValid())) {
+            return mapPollLogToFlightSchedule(latestLog, flightNo, airline, defaultOrigin, defaultDest, scheduledArrival, t.getStatus());
+        }
+
+        String defaultStatus = "COMPLETED".equals(t.getStatus()) ? "LANDED" : "SCHEDULED";
+        OffsetDateTime actualArrival = "COMPLETED".equals(t.getStatus()) ? t.getScheduledPickupAt() : null;
+
+        return new FlightScheduleInfoDto(
+                flightNo,
+                airline,
+                defaultOrigin,
+                defaultDest,
+                null,
+                scheduledArrival,
+                scheduledArrival,
+                actualArrival,
+                defaultStatus,
+                0,
+                null,
+                "Terminal 1",
+                null,
+                "UNAVAILABLE",
+                null,
+                "Jadwal booking asli. Menunggu pembaruan pelacakan live."
+        );
+    }
+
+    private FlightScheduleInfoDto mapPollLogToFlightSchedule(
+            FlightTrackingPollLog log,
+            String flightNo,
+            String airline,
+            String defaultOrigin,
+            String defaultDest,
+            OffsetDateTime scheduledArrivalFallback,
+            String tripStatus) {
+        OffsetDateTime now = OffsetDateTime.now();
+        OffsetDateTime reqTs = log.getRequestTimestamp();
+        Duration age = Duration.between(reqTs, now);
+        String trackingStatus = age.toMinutes() <= 15 ? "LIVE" : (age.toMinutes() <= 60 ? "RECENT" : "STALE");
+
+        String flightStatus = "SCHEDULED";
+        Integer delayMin = 0;
+        String origin = defaultOrigin;
+        String dest = defaultDest;
+        OffsetDateTime schedArr = scheduledArrivalFallback;
+        OffsetDateTime estArr = scheduledArrivalFallback;
+        OffsetDateTime actArr = null;
+        String gate = null;
+        String terminal = "Terminal 1";
+
+        String rawJson = log.getResponsePayload() != null && !log.getResponsePayload().isBlank()
+                ? log.getResponsePayload()
+                : log.getNormalizedPayload();
+
+        if (rawJson != null && !rawJson.isBlank()) {
+            try {
+                var map = objectMapper.readValue(rawJson, Map.class);
+                var flights = map.get("flights");
+                if (flights instanceof Map<?, ?> flightMap && !flightMap.isEmpty()) {
+                    var firstFlight = flightMap.values().iterator().next();
+                    if (firstFlight instanceof Map<?, ?> fData) {
+                        if (fData.get("flightStatus") instanceof String fs && !fs.isBlank()) {
+                            flightStatus = fs.toUpperCase(Locale.ROOT);
+                        }
+                        if (Boolean.TRUE.equals(fData.get("cancelled"))) {
+                            flightStatus = "CANCELLED";
+                        } else if (Boolean.TRUE.equals(fData.get("diverted"))) {
+                            flightStatus = "DIVERTED";
+                        }
+                        if (fData.get("origin") instanceof Map<?, ?> oMap && oMap.get("iata") instanceof String oi) {
+                            origin = oi;
+                        }
+                        if (fData.get("destination") instanceof Map<?, ?> dMap) {
+                            if (dMap.get("iata") instanceof String di) dest = di;
+                            if (dMap.get("gate") instanceof String dg) gate = dg;
+                            if (dMap.get("terminal") instanceof String dt) terminal = dt;
+                        }
+                    }
+                }
+            } catch (Exception ignored) {
+            }
+        }
+
+        if ("COMPLETED".equals(tripStatus) && !"CANCELLED".equals(flightStatus)) {
+            flightStatus = "LANDED";
+            actArr = schedArr;
+        }
+
+        String notes = "LIVE".equals(trackingStatus)
+                ? "Pelacakan FlightAware aktif."
+                : ("Data tersimpan (" + age.toMinutes() + " mnt lalu).");
+
+        return new FlightScheduleInfoDto(
+                flightNo,
+                airline,
+                origin,
+                dest,
+                null,
+                schedArr,
+                estArr,
+                actArr,
+                flightStatus,
+                delayMin,
+                gate,
+                terminal,
+                null,
+                trackingStatus,
+                reqTs,
+                notes
+        );
+    }
+
+    private FlightTrackingPollLog findLatestPollLogForFlight(String tripId, String flightNumber) {
+        if (flightCredentialMapper == null || flightPollLogMapper == null) {
+            return null;
+        }
+        try {
+            List<FlightTrackingCredential> creds = flightCredentialMapper.selectList(
+                    new LambdaQueryWrapper<FlightTrackingCredential>()
+                            .eq(FlightTrackingCredential::getFlightId, tripId)
+                            .or()
+                            .eq(FlightTrackingCredential::getFlightNumber, normalizeFlightNumber(flightNumber))
+                            .orderByDesc(FlightTrackingCredential::getExtractedAt)
+            );
+            if (creds.isEmpty()) return null;
+
+            for (FlightTrackingCredential c : creds) {
+                FlightTrackingPollLog log = flightPollLogMapper.selectOne(
+                        new LambdaQueryWrapper<FlightTrackingPollLog>()
+                                .eq(FlightTrackingPollLog::getCredentialId, c.getId())
+                                .eq(FlightTrackingPollLog::getResponseValid, true)
+                                .orderByDesc(FlightTrackingPollLog::getRequestTimestamp)
+                                .last("LIMIT 1")
+                );
+                if (log != null) return log;
+            }
+        } catch (Exception ignored) {
+        }
+        return null;
+    }
+
+    public static String resolveAirlineName(String flightNumber) {
+        if (flightNumber == null || flightNumber.isBlank()) return "Penerbangan";
+        String normalized = flightNumber.replaceAll("[^A-Za-z0-9]", "").toUpperCase(Locale.ROOT);
+        if (normalized.startsWith("GA") || normalized.startsWith("GIA")) return "Garuda Indonesia";
+        if (normalized.startsWith("JT") || normalized.startsWith("LNI")) return "Lion Air";
+        if (normalized.startsWith("ID") || normalized.startsWith("BTK")) return "Batik Air";
+        if (normalized.startsWith("QG") || normalized.startsWith("CTV")) return "Citilink";
+        if (normalized.startsWith("IU") || normalized.startsWith("SJV")) return "Super Air Jet";
+        if (normalized.startsWith("QZ") || normalized.startsWith("AWQ")) return "AirAsia Indonesia";
+        if (normalized.startsWith("IW") || normalized.startsWith("WON")) return "Wings Air";
+        if (normalized.startsWith("IP") || normalized.startsWith("BJV")) return "Pelita Air";
+        if (normalized.startsWith("MH") || normalized.startsWith("MAS")) return "Malaysia Airlines";
+        if (normalized.startsWith("SQ") || normalized.startsWith("SIA")) return "Singapore Airlines";
+        if (normalized.startsWith("AK")) return "AirAsia";
+        if (normalized.startsWith("TR") || normalized.startsWith("TGW")) return "Scoot";
+        if (normalized.startsWith("SJ") || normalized.startsWith("SJY")) return "Sriwijaya Air";
+        if (normalized.startsWith("IN") || normalized.startsWith("NAM")) return "NAM Air";
+        return "Penerbangan";
+    }
+
+    private String normalizeFlightNumber(String flightNo) {
+        if (flightNo == null) return "";
+        return flightNo.replaceAll("[^A-Za-z0-9]", "").toUpperCase(Locale.ROOT);
     }
 }

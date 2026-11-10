@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:mandiri_transport_mobile/core/utils/deep_links.dart';
+import 'package:mandiri_transport_mobile/core/utils/flight_helper.dart';
 import 'package:mandiri_transport_mobile/core/utils/formatters.dart';
 import 'package:mandiri_transport_mobile/data/local/offline_store.dart';
 import 'package:mandiri_transport_mobile/data/models/models.dart';
@@ -258,6 +259,87 @@ void main() {
       expect(afterList.length, initialCount + 1);
       expect(afterList.first.title, 'Penjemputan KNO Segera (Diperbarui)');
       expect(afterList.first.fcmDeliveryStatus, 'PUSH_SENT');
+    });
+
+    test('FlightHelper, WIB date/time formatters, staleness detection and Trip flightInfo updates', () async {
+      // 1. Indonesian Airline Resolver
+      expect(FlightHelper.resolveAirlineName('GA-190'), 'Garuda Indonesia');
+      expect(FlightHelper.resolveAirlineName('ga190'), 'Garuda Indonesia');
+      expect(FlightHelper.resolveAirlineName('JT-390'), 'Lion Air');
+      expect(FlightHelper.resolveAirlineName('QG 880'), 'Citilink');
+      expect(FlightHelper.resolveAirlineName('ID-6882'), 'Batik Air');
+      expect(FlightHelper.resolveAirlineName('IU-123'), 'Super Air Jet');
+      expect(FlightHelper.resolveAirlineName('QZ-456'), 'AirAsia Indonesia');
+      expect(FlightHelper.resolveAirlineName('MH-860'), 'Malaysia Airlines');
+      expect(FlightHelper.resolveAirlineName('SQ-990'), 'Singapore Airlines');
+      expect(FlightHelper.resolveAirlineName('XYZ-999'), 'Penerbangan');
+
+      // Status labels
+      expect(FlightHelper.statusLabel('IN_AIR'), 'Sedang Terbang (In Air)');
+      expect(FlightHelper.statusLabel('LANDED'), 'Mendarat (Landed)');
+      expect(FlightHelper.statusLabel('DELAYED'), 'Terlambat (Delayed)');
+      expect(FlightHelper.statusLabel('CANCELLED'), 'Dibatalkan (Cancelled)');
+      expect(FlightHelper.statusLabel('DIVERTED'), 'Dialihkan (Diverted)');
+      expect(FlightHelper.statusLabel('BOARDING'), 'Boarding di Asal');
+      expect(FlightHelper.statusLabel('SCHEDULED'), 'Tepat Waktu (On Time)');
+
+      // Route resolver
+      final pickupRoute = FlightHelper.resolveFlightRoute('GA-190', tripType: 'AIRPORT_PICKUP');
+      expect(pickupRoute.origin, 'CGK');
+      expect(pickupRoute.destination, 'KNO');
+
+      final dropRoute = FlightHelper.resolveFlightRoute('GA-190', tripType: 'AIRPORT_DROP');
+      expect(dropRoute.origin, 'KNO');
+      expect(dropRoute.destination, 'CGK');
+
+      // 2. isTodayWib verification (UTC+7)
+      // Test reference: 2026-11-10 14:00 UTC = 2026-11-10 21:00 WIB
+      final nowUtc = DateTime.utc(2026, 11, 10, 14, 0, 0);
+      expect(AppFormatters.isTodayWib('2026-11-10T21:00:00+07:00', nowOverride: nowUtc), isTrue);
+      expect(AppFormatters.isTodayWib('2026-11-10T00:01:00+07:00', nowOverride: nowUtc), isTrue);
+      expect(AppFormatters.isTodayWib('2026-11-09T23:59:00+07:00', nowOverride: nowUtc), isFalse);
+      expect(AppFormatters.isTodayWib('2026-11-11T00:05:00+07:00', nowOverride: nowUtc), isFalse);
+      expect(AppFormatters.isTodayWib(null, nowOverride: nowUtc), isFalse);
+
+      // 3. timeWibOnly
+      expect(AppFormatters.timeWibOnly('2026-11-10T21:05:00+07:00'), '21:05 WIB');
+      expect(AppFormatters.timeWibOnly(null), '-');
+
+      // 4. flightTrackingStaleness
+      final fiveMinAgo = nowUtc.subtract(const Duration(minutes: 5)).toIso8601String();
+      expect(
+        AppFormatters.flightTrackingStaleness(fiveMinAgo, nowOverride: nowUtc),
+        'Update 5 mnt lalu',
+      );
+      expect(
+        AppFormatters.flightTrackingStaleness(null, nowOverride: nowUtc),
+        'Pelacakan belum tersedia',
+      );
+
+      // 5. OfflineStore updateTripFlightInfo
+      final store = await OfflineStore.create();
+      final initialTrip = store.loadTrips().firstWhere((t) => t.id == 'trp-201');
+      expect(initialTrip.flightInfo, isNotNull);
+      expect(initialTrip.flightInfo?.flightNumber, 'GA-190');
+
+      const updatedInfo = FlightScheduleInfo(
+        flightNumber: 'GA-190',
+        airlineName: 'Garuda Indonesia',
+        flightStatus: 'LANDED',
+        scheduledArrivalTime: '2026-11-10T21:00:00+07:00',
+        actualArrivalTime: '2026-11-10T21:12:00+07:00',
+        originAirport: 'CGK',
+        destinationAirport: 'KNO',
+        terminal: 'Terminal 1',
+        gate: 'Gate 4',
+        lastTrackedAt: '2026-11-10T21:14:00+07:00',
+        trackingStatus: 'LIVE',
+      );
+
+      await store.updateTripFlightInfo('trp-201', updatedInfo);
+      final reloadedTrip = store.loadTrips().firstWhere((t) => t.id == 'trp-201');
+      expect(reloadedTrip.flightInfo?.flightStatus, 'LANDED');
+      expect(reloadedTrip.flightInfo?.actualArrivalTime, '2026-11-10T21:12:00+07:00');
     });
   });
 }

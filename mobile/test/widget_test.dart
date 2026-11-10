@@ -227,7 +227,7 @@ void main() {
       );
       expect(find.textContaining('BK 4455 MT'), findsOneWidget);
 
-      // Tab 5: Analitik BI (<5 perjalanan badge & Fortuner evaluation)
+      // Tab 5: Analitik BI (<5 perjalanan badge, FlightAware Research Console & Fortuner evaluation)
       await tester.tap(find.text('Analitik BI'));
       await tester.pumpAndSettle();
       expect(
@@ -236,12 +236,38 @@ void main() {
       );
       expect(find.textContaining('< 5 perjalanan'), findsWidgets);
 
+      await tester.scrollUntilVisible(
+        find.text('Buka FlightAware Research Console'),
+        250,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.ensureVisible(find.text('Buka FlightAware Research Console'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Buka FlightAware Research Console'));
+      await tester.pumpAndSettle();
+      expect(
+        find.text('FlightAware Research Console & Token Lifecycle'),
+        findsOneWidget,
+      );
+      await tester.ensureVisible(find.text('Extract Token (trackpollGlobals)'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Extract Token (trackpollGlobals)'));
+      await tester.pumpAndSettle();
+      expect(find.text('Status: EXTRACTED'), findsOneWidget);
+      await tester.tap(find.byIcon(Icons.close).first);
+      await tester.pumpAndSettle();
+
       // Switch to Driver & test Airport Signboard + Single-Tap Lifecycle Undo
       await tester.tap(find.text('Ganti Akun'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Bang Budi — Supir'));
       await tester.pumpAndSettle();
 
+      await tester.scrollUntilVisible(
+        find.text('Layar Papan Nama Jemput Bandara (KNO)'),
+        300,
+        scrollable: find.byType(Scrollable).first,
+      );
       await tester.tap(find.text('Layar Papan Nama Jemput Bandara (KNO)'));
       await tester.pumpAndSettle();
       expect(find.text('IBU RATNA KUSUMA'), findsOneWidget);
@@ -249,6 +275,13 @@ void main() {
       await tester.pumpAndSettle();
 
       // Single-tap lifecycle: ASSIGNED -> ACCEPTED ("Terima Tugas"), then Undo!
+      await tester.scrollUntilVisible(
+        find.text('Terima Tugas'),
+        300,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.ensureVisible(find.text('Terima Tugas'));
+      await tester.pumpAndSettle();
       await tester.tap(find.text('Terima Tugas'));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 500));
@@ -339,6 +372,69 @@ void main() {
       await tester.tap(find.text('Uji Push FCM'));
       await tester.pumpAndSettle();
       expect(find.text('Uji Push Live — Mandiri Transport'), findsWidgets);
+    },
+  );
+
+  testWidgets(
+    'Today Flight Schedule Highlight: Owner & Driver view, timing comparison, staleness badge & modal sheet',
+    (WidgetTester tester) async {
+      tester.view.physicalSize = const Size(1080, 2400);
+      tester.view.devicePixelRatio = 2.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      SharedPreferences.setMockInitialValues({});
+      final store = await OfflineStore.create();
+      final fakeFcm = FakeFcmPushClient();
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            offlineStoreProvider.overrideWithValue(store),
+            networkSyncEnabledProvider.overrideWithValue(false),
+            fcmPushClientProvider.overrideWithValue(fakeFcm),
+          ],
+          child: const MandiriTransportApp(),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // 1. Owner Dashboard displays "Jadwal Penerbangan Hari Ini"
+      await tester.tap(find.text('Pak Hendra — Pemilik/Dispatcher'));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('Jadwal Penerbangan Hari Ini'), findsOneWidget);
+      expect(find.text('GA-190'), findsWidgets);
+      expect(find.text('JADWAL RESMI'), findsWidgets);
+      expect(find.text('ESTIMASI KINI'), findsWidgets);
+      expect(find.text('AKTUAL TIBA'), findsWidgets);
+
+      // 2. Switch to Driver (Bang Budi)
+      await tester.tap(find.text('Ganti Akun'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Bang Budi — Supir'));
+      await tester.pumpAndSettle();
+
+      // Driver screen displays "Penerbangan Tugas Saya Hari Ini"
+      expect(find.textContaining('Penerbangan Tugas Saya Hari Ini'), findsOneWidget);
+      expect(find.text('GA-190'), findsWidgets);
+      expect(find.text('Detail & Papan'), findsWidgets);
+
+      // Tap "Detail & Papan" -> opens modal sheet
+      await tester.tap(find.text('Detail & Papan').first);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Detail Penerbangan • GA-190'), findsOneWidget);
+      await tester.scrollUntilVisible(
+        find.text('Buka Layar Papan Nama (KNO)'),
+        300,
+        scrollable: find.byType(Scrollable).last,
+      );
+      expect(find.text('Buka Layar Papan Nama (KNO)'), findsOneWidget);
+
+      // Close modal sheet
+      await tester.tap(find.byIcon(Icons.close_rounded));
+      await tester.pumpAndSettle();
     },
   );
 }

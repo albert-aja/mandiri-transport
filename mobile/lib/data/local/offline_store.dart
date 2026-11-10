@@ -213,6 +213,20 @@ class OfflineStore {
   Future<void> saveTrips(List<Trip> items) =>
       _saveList(_kTrips, items, (e) => e.toJson());
 
+  Future<void> updateTripFlightInfo(
+    String tripId,
+    FlightScheduleInfo info,
+  ) async {
+    final trips = loadTrips();
+    final updated = trips.map((t) {
+      if (t.id == tripId) {
+        return t.copyWith(flightInfo: info);
+      }
+      return t;
+    }).toList();
+    await saveTrips(updated);
+  }
+
   List<CashHandover> loadCashHandovers() => _loadList(
     _kHandovers,
     CashHandover.fromJson,

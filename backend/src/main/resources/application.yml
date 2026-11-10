@@ -38,6 +38,15 @@ app:
     credentials-json: ${FCM_CREDENTIALS_JSON:}
     api-base-url: ${FCM_API_BASE_URL:https://fcm.googleapis.com}
     android-channel-id: mandiri_ops_high_importance
+  flight-tracking:
+    encryption-key: ${FLIGHT_TRACKING_ENCRYPTION_KEY:mandiri-transport-dev-flight-token-aes256-key-change-in-prod}
+    http-timeout-ms: ${FLIGHT_TRACKING_HTTP_TIMEOUT_MS:10000}
+    min-poll-interval-seconds: ${FLIGHT_TRACKING_MIN_POLL_INTERVAL_SECONDS:15}
+    poll-log-retention-days: ${FLIGHT_TRACKING_POLL_LOG_RETENTION_DAYS:30}
+    max-logs-per-credential: ${FLIGHT_TRACKING_MAX_LOGS_PER_CREDENTIAL:200}
+    flightaware:
+      poll-url: ${FLIGHTAWARE_POLL_URL:https://www.flightaware.com/ajax/trackpoll.rvt}
+      allowed-hosts: ${FLIGHTAWARE_ALLOWED_HOSTS:flightaware.com,www.flightaware.com,id.flightaware.com,localhost,127.0.0.1}
 
 ---
 spring:

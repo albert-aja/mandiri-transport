@@ -6,6 +6,7 @@ import '../../core/utils/formatters.dart';
 import '../../core/widgets/shared_widgets.dart';
 import '../../data/models/models.dart';
 import '../../data/state/app_controller.dart';
+import 'flightaware_research_sheet.dart';
 
 class OwnerBiTab extends ConsumerStatefulWidget {
   const OwnerBiTab({super.key});
@@ -559,6 +560,42 @@ class _OwnerBiTabState extends ConsumerState<OwnerBiTab> {
                       label: const Text('FirebaseOptions'),
                     ),
                   ],
+                ),
+              ],
+            ),
+          ),
+        ),
+
+        // Integrations -> Flight Tracking -> FlightAware Research Console
+        const SizedBox(height: 14),
+        const Text(
+          'Integrations → Flight Tracking → FlightAware Research',
+          style: TextStyle(fontSize: 15.5, fontWeight: FontWeight.w800),
+        ),
+        const SizedBox(height: 8),
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Modul Riset Pelacakan Penerbangan & Manajemen Token Terenkripsi (AES-256-GCM)',
+                  style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13.5),
+                ),
+                const SizedBox(height: 4),
+                const Text(
+                  'Uji ekstraksi trackpollGlobals, polling endpoint trackpoll.rvt, perbandingan diff respons berurutan, manajemen siklus hidup kredensial, dan matriks validasi 13 kebutuhan operasional.',
+                  style: TextStyle(
+                    fontSize: 12.5,
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                FilledButton.icon(
+                  onPressed: () => showFlightAwareResearchConsoleSheet(context),
+                  icon: const Icon(Icons.science_rounded, size: 18),
+                  label: const Text('Buka FlightAware Research Console'),
                 ),
               ],
             ),

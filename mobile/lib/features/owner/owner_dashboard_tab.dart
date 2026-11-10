@@ -7,6 +7,7 @@ import '../../core/widgets/shared_widgets.dart';
 import '../../data/state/app_controller.dart';
 import 'dispatch_simulator_sheet.dart';
 import 'quick_booking_sheet.dart';
+import '../flight/today_flights_highlight_section.dart';
 
 class OwnerDashboardTab extends ConsumerWidget {
   const OwnerDashboardTab({super.key});
@@ -134,6 +135,10 @@ class OwnerDashboardTab extends ConsumerWidget {
           icon: const Icon(Icons.flash_on_rounded),
           label: const Text('+ Booking Cepat (30 Detik)'),
         ),
+        const SizedBox(height: 12),
+
+        // Today's Flight Schedule Highlight
+        const TodayFlightsHighlightSection(isOwnerView: true),
 
         // Sync Conflict Review Banner (if any offline conflicts staged)
         if (state.unresolvedConflicts.isNotEmpty) ...[

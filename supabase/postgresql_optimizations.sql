@@ -17,3 +17,9 @@ CREATE INDEX IF NOT EXISTS idx_trips_vehicle_window_gist
       AND vehicle_id IS NOT NULL
       AND status NOT IN ('CANCELLED', 'NO_SHOW', 'REASSIGNED', 'COMPLETED');
 
+-- Partial unique index preventing duplicate ACTIVE credentials per (provider, flight_number, flight_date)
+CREATE UNIQUE INDEX IF NOT EXISTS idx_ft_cred_one_active_per_flight_instance
+    ON flight_tracking_credentials (provider, flight_number, flight_date)
+    WHERE token_status = 'ACTIVE' AND deleted_at IS NULL;
+
+

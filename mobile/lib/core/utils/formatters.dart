@@ -131,6 +131,44 @@ class AppFormatters {
     if (diff.inHours < 24) return '${diff.inHours} jam lalu';
     return '${diff.inDays} hari lalu';
   }
+
+  /// Returns whether [isoString] falls on today in the application's local timezone (WIB, UTC+7).
+  static bool isTodayWib(String? isoString, {DateTime? nowOverride}) {
+    if (isoString == null || isoString.isEmpty) return false;
+    final parsed = DateTime.tryParse(isoString);
+    if (parsed == null) return false;
+    final nowWib = (nowOverride ?? DateTime.now()).toUtc().add(const Duration(hours: 7));
+    final targetWib = parsed.toUtc().add(const Duration(hours: 7));
+    return targetWib.year == nowWib.year &&
+        targetWib.month == nowWib.month &&
+        targetWib.day == nowWib.day;
+  }
+
+  /// Formats time in WIB as short `HH:mm WIB`, e.g. `21:00 WIB`.
+  static String timeWibOnly(String? isoString) {
+    if (isoString == null || isoString.isEmpty) return '-';
+    final parsed = DateTime.tryParse(isoString);
+    if (parsed == null) return isoString;
+    final wib = parsed.toUtc().add(const Duration(hours: 7));
+    final hh = wib.hour.toString().padLeft(2, '0');
+    final mm = wib.minute.toString().padLeft(2, '0');
+    return '$hh:$mm WIB';
+  }
+
+  /// Relative staleness indicator for external flight tracking data.
+  static String flightTrackingStaleness(String? isoString, {DateTime? nowOverride}) {
+    if (isoString == null || isoString.isEmpty) {
+      return 'Pelacakan belum tersedia';
+    }
+    final recorded = DateTime.tryParse(isoString);
+    if (recorded == null) return isoString;
+    final now = (nowOverride ?? DateTime.now()).toUtc();
+    final diff = now.difference(recorded.toUtc());
+    if (diff.inSeconds < 60) return 'Update 1 mnt lalu';
+    if (diff.inMinutes < 60) return 'Update ${diff.inMinutes} mnt lalu';
+    if (diff.inHours < 24) return 'Update ${diff.inHours} jam lalu';
+    return 'Update ${diff.inDays} hari lalu';
+  }
 }
 
 /// Formats numeric text field input with Indonesian dot thousand separators (`220.000`).

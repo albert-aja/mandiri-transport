@@ -7,6 +7,7 @@ import 'package:geolocator/geolocator.dart';
 import '../../core/network/api_client.dart';
 import '../../core/notifications/fcm_push_service.dart';
 import '../../core/utils/deep_links.dart';
+import '../../core/utils/flight_helper.dart';
 import '../local/medan_seed_data.dart';
 import '../local/offline_store.dart';
 import '../models/models.dart';
@@ -207,6 +208,7 @@ class AppController extends Notifier<AppState> {
       _initConnectivityListener();
     }
     Future.microtask(initializeLiveFcm);
+    Future.microtask(refreshTodayFlightSchedules);
 
     return AppState(
       session: store.loadSession(),
@@ -540,6 +542,66 @@ class AppController extends Notifier<AppState> {
     return config != null && config.isComplete
         ? 'Konfigurasi FirebaseOptions disimpan & diinisialisasi ulang.'
         : 'Konfigurasi runtime dibersihkan (kembali ke google-services.json bawaan).';
+  }
+
+  Future<void> refreshTodayFlightSchedules() async {
+    if (_networkEnabled && state.effectiveOnline && state.session != null) {
+      try {
+        final res = await _api.get('/trips/today-flights');
+        if (res is List<dynamic> && res.isNotEmpty) {
+          final trips = _store.loadTrips();
+          final updated = trips.map((t) {
+            final match = res
+                .whereType<Map<String, dynamic>>()
+                .where((item) => item['tripId'] == t.id)
+                .firstOrNull;
+            if (match != null && match['flightInfo'] is Map<String, dynamic>) {
+              final info = FlightScheduleInfo.fromJson(
+                match['flightInfo'] as Map<String, dynamic>,
+              );
+              return t.copyWith(flightInfo: info);
+            }
+            return t;
+          }).toList();
+          await _store.saveTrips(updated);
+          _reloadFromStore();
+          return;
+        }
+      } catch (_) {}
+    }
+
+    // Offline / Local fallback: ensure any trip with a flight number has at least initial schedule info
+    final trips = _store.loadTrips();
+    bool changed = false;
+    final updated = trips.map((t) {
+      if (t.flightNumber != null &&
+          t.flightNumber!.trim().isNotEmpty &&
+          t.flightInfo == null) {
+        changed = true;
+        final route = FlightHelper.resolveFlightRoute(
+          t.flightNumber,
+          tripType: t.tripType,
+        );
+        return t.copyWith(
+          flightInfo: FlightScheduleInfo(
+            flightNumber: t.flightNumber!,
+            airlineName: FlightHelper.resolveAirlineName(t.flightNumber),
+            originAirport: route.origin,
+            destinationAirport: route.destination,
+            scheduledArrivalTime: t.scheduledPickupAt,
+            flightStatus: t.status == 'COMPLETED' ? 'LANDED' : 'SCHEDULED',
+            trackingStatus: 'UNAVAILABLE',
+            trackingNotes: 'Jadwal booking asli. Belum ada pelacakan live.',
+          ),
+        );
+      }
+      return t;
+    }).toList();
+
+    if (changed) {
+      await _store.saveTrips(updated);
+      _reloadFromStore();
+    }
   }
 
   void _reloadFromStore() {
